@@ -7,6 +7,10 @@ TZ=Asia/Shanghai),覆盖:阴阳遁常规/节气分钟边界/子时换日/闰月/
 四害断言来自 DrawPaipan 配色解码(刑=#6F00D2 墓=#009100 刑墓=#EE00EE/#EA0000
 门迫=<i> 空=◎),与《四害判定规格》的击刑/入墓/门迫/时空映射逐项对照。
 「日空并标」为 D2 补齐项(原引擎无此层),在 test_qimen_sihai.py 单独测试。
+
+节气表:本套件测的是**移植保真度**,所以整个模块把节气表换回 iqm.js 原表再比
+(见 _lineage_jieqi_table)。引擎实际采用的表在 2010 年后做过校对,有意与 iqm.js
+相差 1 分钟的条目(如 2026 立春)由 test_qimen_jieqi_table.py 单独覆盖。
 """
 
 from __future__ import annotations
@@ -17,8 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from qimen_engine import calendar as qimen_calendar
 from qimen_engine import cast, cyclical, detect_flags
-from qimen_engine.data_tables import ZHI
+from qimen_engine.data_tables import FINEDATE, ZHI
 
 FIXTURE = Path(__file__).parent / "fixtures" / "golden_charts.json"
 
@@ -31,6 +36,13 @@ def _load_cases() -> list[dict[str, Any]]:
 
 
 CASES = _load_cases()
+
+
+@pytest.fixture(autouse=True)
+def _lineage_jieqi_table(monkeypatch: pytest.MonkeyPatch) -> None:
+    """节气表换回 iqm.js 原表(1930-2030)——golden 由原引擎用它自己的表生成。"""
+    monkeypatch.setattr(qimen_calendar, "_FINE_TABLE", FINEDATE)
+    monkeypatch.setattr(qimen_calendar, "_FINE_LAST_YEAR", 2030)
 
 
 def _ju_override(zxj: int | None) -> tuple[str, int] | None:

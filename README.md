@@ -12,8 +12,8 @@
 阴盘 · 时家 · 转盘 · 天禽随芮 · 中五寄坤二。定局 = (农历年支序 + 月 + 日 + 时支序) mod 9,
 阴阳遁按节气半区(夏至→冬至为阴遁)。八神阳遁顺布、阴遁反序;不提前入局。
 
-逐函数移植自师门 Android 应用的 JS 引擎 `iqm.js`(已获授权),它是可执行的 SoT:
-Python 与它不一致时,以它为准。
+逐函数移植自师门 Android 应用的 JS 引擎 `iqm.js`(已获授权),它是排盘算法的可执行
+SoT:Python 与它不一致时,以它为准。唯一有意的偏离是节气时刻表(见「覆盖范围」)。
 
 ## 用法
 
@@ -40,8 +40,12 @@ chart = build_chart(pan, cast_time=dt, time_source="explicit")  # Chart JSON v1(
 | 可排盘日期 | 1900-01-31 ~ 2049-12-31(农历表) | `ValueError` |
 | 节气分钟精度 | 1930 ~ 2050 | 回退近似公式,时分归零(只影响 1930 年前出生的命盘) |
 
-节气表两段:1930–2030 是 iqm.js 原表(`data_tables.FINEDATE`),2031–2050 是 JPL DE440s
-星历计算的扩展段(`jieqi_ext.FINEDATE_EXT`),同编码、同截断到分的口径。
+节气表两段,同编码、同截断到分的口径:
+
+- 1930–2009:iqm.js 原表(`data_tables.FINEDATE`)。
+- 2010–2050:JPL DE440s 星历计算段(`jieqi_computed.FINEDATE_COMPUTED`)。原表 2031 起
+  无表,2011 起逐年偏早(2010–2030 的 504 项中 88 项早 1 分钟,例:2026 立春实为 04:02,
+  原表 04:01),所以这一段不用原表。2027 年起是预报值,个别条目将来可能有 1 分钟出入。
 
 ## 模块
 
@@ -54,7 +58,7 @@ chart = build_chart(pan, cast_time=dt, time_source="explicit")  # Chart JSON v1(
 | `chang_sheng` / `wuxing` | 十二长生、五行生克与月令旺衰 |
 | `mingju` | 命盘定宫与大运 |
 | `chart` | `Pan` → Chart JSON v1;宫名归一;可引用要素集 |
-| `data_tables` / `jieqi_ext` | 生成的常量表,**不要手改** |
+| `data_tables` / `jieqi_computed` | 生成的常量表,**不要手改** |
 
 ## 测试与基准
 
@@ -63,13 +67,14 @@ cd shared/python/qimen_engine && ../../../.venv/bin/pytest tests/ -q
 ```
 
 - **golden**:`tests/fixtures/golden_charts.json` 由 node 执行原版 iqm.js 生成(46 例),
-  Python 逐宫逐层对比。
-- **节气扩展段**:与寿星算法(`chinese_calendrics`)逐项对账。
+  Python 逐宫逐层对比。比对时节气表换回原表——这套测的是移植保真度。
+- **节气计算段**:与寿星算法(`chinese_calendrics`)逐项对账,并对官方年历锚点。
 
-重新生成(都需要原版 `iqm.js`,放在 `tests/fixtures/vendor/iqm.js`;该路径被 git 忽略):
+重新生成。前两条需要原版 `iqm.js`:它不入库,用前放到 `tests/fixtures/vendor/iqm.js`
+(该路径被 git 忽略):
 
 ```bash
 node tests/fixtures/gen_tables.js > qimen_engine/data_tables.py
 TZ=Asia/Shanghai node tests/fixtures/generate_golden.js > tests/fixtures/golden_charts.json
-uv run tests/fixtures/gen_jieqi_ext.py > qimen_engine/jieqi_ext.py   # 首次下载 32MB 星历
+uv run tests/fixtures/gen_jieqi_computed.py > qimen_engine/jieqi_computed.py   # 首次下载 32MB 星历
 ```

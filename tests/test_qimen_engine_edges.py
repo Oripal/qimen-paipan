@@ -58,7 +58,7 @@ class TestAdvanceMinutesRollover:
 class TestJieqiYearAtZishiWindow:
     """R1-F3:23:5x 起局撞交气窗口,交气时刻年份曾回退一整年。
 
-    2025 冬至交气 = 2025-12-21 23:02(引擎 s_term)。23:00 起局换日到
+    2025 冬至交气 = 2025-12-21 23:03(引擎 s_term)。23:00 起局换日到
     12-22,term=冬至;修前用换日前 cast_time 作参考 → 错报 2024-12-21。
     """
 

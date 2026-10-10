@@ -3,15 +3,20 @@
 # requires-python = ">=3.12"
 # dependencies = ["skyfield==1.55"]
 # ///
-"""节气分钟精度表扩展段生成器(2031-2050)— 天文计算,非 iqm.js 原表。
+"""节气分钟精度表计算段生成器(2010-2050)— 天文计算,非 iqm.js 原表。
 
-师门原表 finedate(iqm.js)只覆盖 1930-2030,范围外原引擎回退近似公式、时分归零。
-本脚本用 JPL DE440s 星历补出 2031-2050 段,写成与原表同编码、同取整口径的
-FINEDATE_EXT,供 qimen_engine/calendar.py 的 s_term 拼接使用;原表一字不动。
+师门原表 finedate(iqm.js)覆盖 1930-2030,有两处不足:
+- 2031 起无表,原引擎回退近似公式、时分归零;
+- 2011 起逐年偏早(编表时对未来地球自转的外推偏大):到 2020 年代约三成条目
+  比实际交气时刻早 1 分钟(例:2026 立春实为 04:02,原表 04:01)。
+本脚本用 JPL DE440s 星历算出 2010-2050 段,写成与原表同编码、同取整口径的
+FINEDATE_COMPUTED;qimen_engine/calendar.py 的 s_term 对 1930-2009 用原表、
+2010 起用本表。data_tables.FINEDATE 仍是 iqm.js 原样(2010-2030 行留作对照)。
 
 算法:太阳地心视黄经(当日真黄道,含光行差+章动)过 15° 整数倍的 TT 时刻。
-民用时:北京时间 = UTC+8,UTC 按现行闰秒数外推(TAI−UTC=37s,即 TT−UTC=69.184s,
-假定此后不再增减闰秒)——结果只依赖星历,不依赖 ΔT 预报。
+民用时:北京时间 = UTC+8。已发生的年份用实际闰秒;FORECAST_FIRST_YEAR 起为
+预报,UTC 按现行闰秒数外推(TAI−UTC=37s,即 TT−UTC=69.184s,假定此后不再
+增减闰秒)——结果只依赖星历,不依赖 ΔT 预报。
 取整:**截断到分**。这是原表口径(对账:1972-2009 段原表 = 本算法截断分),
 不是紫金山年历的四舍五入口径。
 
@@ -21,7 +26,7 @@ FINEDATE_EXT,供 qimen_engine/calendar.py 的 s_term 拼接使用;原表一字�
   全部相差 ≤1 分钟,且逐项相等率 ≥97%。
 
 Regenerate(星历文件 de440s.bsp 约 32MB,首次自动下载到 --ephemeris-dir):
-  uv run tests/fixtures/gen_jieqi_ext.py > qimen_engine/jieqi_ext.py
+  uv run tests/fixtures/gen_jieqi_computed.py > qimen_engine/jieqi_computed.py
 """
 
 from __future__ import annotations
@@ -38,8 +43,11 @@ from skyfield import almanac
 from skyfield.api import Loader
 from skyfield.framelib import ecliptic_frame
 
-EXT_FIRST_YEAR = 2031
-EXT_LAST_YEAR = 2050
+COMPUTED_FIRST_YEAR = 2010
+COMPUTED_LAST_YEAR = 2050
+LINEAGE_LAST_YEAR = 2030  # 原表末年(2010-2030 与本表重叠,留作对照)
+# 闰秒由 IERS 提前约半年公布;此年起的条目是预报值(生成于 2026-10)
+FORECAST_FIRST_YEAR = 2027
 RECONCILE_YEARS = range(1972, 2010)
 RECONCILE_MIN_EXACT = 0.97
 EPHEMERIS = "de440s.bsp"
@@ -148,48 +156,63 @@ def main() -> None:
     reconciled = reconcile(solver, lineage)
 
     values: list[int] = []
-    sensitive = 0
-    for year in range(EXT_FIRST_YEAR, EXT_LAST_YEAR + 1):
-        for moment, tt_minus_utc in solver.year_terms(year):
-            if abs(tt_minus_utc - TT_MINUS_UTC_S) > 1e-3:
-                raise SystemExit(f"{year}: TT−UTC={tt_minus_utc},闰秒外推假设被打破")
-            seconds = moment.second + moment.microsecond / 1e6
-            sensitive += min(seconds, 60 - seconds) < BOUNDARY_SENSITIVE_S
-            values.append(encode(_truncate(moment)))
-    last_lineage, first_ext = decode(lineage[-1]), decode(values[0])
-    if not timedelta(days=14) < first_ext - last_lineage < timedelta(days=16):
-        raise SystemExit(f"与原表接缝异常: {last_lineage} → {first_ext}")
+    sensitive = forecast = lineage_early = lineage_late = 0
+    for year in range(COMPUTED_FIRST_YEAR, COMPUTED_LAST_YEAR + 1):
+        for n, (moment, tt_minus_utc) in enumerate(solver.year_terms(year)):
+            if year >= FORECAST_FIRST_YEAR:
+                if abs(tt_minus_utc - TT_MINUS_UTC_S) > 1e-3:
+                    raise SystemExit(f"{year}: TT−UTC={tt_minus_utc},闰秒外推假设被打破")
+                seconds = moment.second + moment.microsecond / 1e6
+                sensitive += min(seconds, 60 - seconds) < BOUNDARY_SENSITIVE_S
+                forecast += 1
+            value = encode(_truncate(moment))
+            if year <= LINEAGE_LAST_YEAR:  # 与原表重叠段:只允许差 1 分钟
+                diff_min = (decode(lineage[(year - 1930) * 24 + n])
+                            - decode(value)).total_seconds() / 60
+                if abs(diff_min) > 1:
+                    raise SystemExit(f"与原表相差超过 1 分钟: {year} 节气{n}")
+                lineage_early += diff_min == -1
+                lineage_late += diff_min == 1
+            values.append(value)
+    seam_prev = decode(lineage[(COMPUTED_FIRST_YEAR - 1930) * 24 - 1])
+    if not timedelta(days=14) < decode(values[0]) - seam_prev < timedelta(days=16):
+        raise SystemExit(f"与原表接缝异常: {seam_prev} → {decode(values[0])}")
+    overlap = (LINEAGE_LAST_YEAR - COMPUTED_FIRST_YEAR + 1) * 24
 
     out = [
-        f'"""节气分钟精度表扩展段 {EXT_FIRST_YEAR}-{EXT_LAST_YEAR} — 天文计算生成,非 iqm.js 原表。',
+        f'"""节气分钟精度表计算段 {COMPUTED_FIRST_YEAR}-{COMPUTED_LAST_YEAR} — 天文计算生成,'
+        "非 iqm.js 原表。",
         "",
         "GENERATED FILE — do not edit by hand.",
-        "Regenerate: uv run tests/fixtures/gen_jieqi_ext.py > <this file>",
+        "Regenerate: uv run tests/fixtures/gen_jieqi_computed.py > <this file>",
         "",
         "来源:JPL DE440s 星历(skyfield 1.55),太阳地心视黄经过 15° 整数倍的时刻。",
-        "口径:北京时间 = UTC+8,UTC 按现行闰秒数外推(TT−UTC=69.184s);**截断到分**",
-        "(与 data_tables.FINEDATE 原表同口径同编码,基年 1930)。",
+        f"口径:北京时间 = UTC+8;{FORECAST_FIRST_YEAR} 年前用实际闰秒,其后按现行闰秒数外推",
+        "(TT−UTC=69.184s);**截断到分**(与 data_tables.FINEDATE 原表同口径同编码,基年 1930)。",
         f"对账:1972-2009 段本算法与原表逐项相等 {reconciled},其余相差 1 分钟。",
-        f"精度声明:{len(values)} 项中 {sensitive} 项的秒数距整分不足 "
-        f"{BOUNDARY_SENSITIVE_S:g} 秒——届时实际 UTC",
-        "(取决于地球自转与闰秒政策)若偏离本外推数秒,这些项的截断分会变动 1 分钟。",
+        f"取代原表:{COMPUTED_FIRST_YEAR}-{LINEAGE_LAST_YEAR} 段 {overlap} 项中,原表有 "
+        f"{lineage_early} 项早 1 分钟、{lineage_late} 项晚 1 分钟,",
+        "其余相等;s_term 自本表首年起不再用原表。",
+        f"精度声明:{FORECAST_FIRST_YEAR} 年起 {forecast} 项为预报值,其中 {sensitive} 项的秒数"
+        f"距整分不足 {BOUNDARY_SENSITIVE_S:g} 秒——",
+        "届时实际 UTC(取决于地球自转与闰秒政策)若偏离外推数秒,这些项会变动 1 分钟。",
         '"""',
         "",
         "from typing import Final",
         "",
-        f"FINEDATE_EXT_FIRST_YEAR: Final[int] = {EXT_FIRST_YEAR}",
+        f"FINEDATE_COMPUTED_FIRST_YEAR: Final[int] = {COMPUTED_FIRST_YEAR}",
         "",
         "# 24 项/年(0=小寒 … 23=冬至),编码 min|hour|day|mon|year",
-        "FINEDATE_EXT: Final[tuple[int, ...]] = (",
+        "FINEDATE_COMPUTED: Final[tuple[int, ...]] = (",
     ]
     for i in range(0, len(values), 24):
-        out.append(f"    # {EXT_FIRST_YEAR + i // 24}")
+        out.append(f"    # {COMPUTED_FIRST_YEAR + i // 24}")
         for j in range(i, i + 24, 8):
             out.append("    " + ", ".join(str(v) for v in values[j:j + 8]) + ",")
     out.append(")")
     sys.stdout.write("\n".join(out) + "\n")
-    print(f"reconciled {reconciled}; boundary-sensitive {sensitive}/{len(values)}",
-          file=sys.stderr)
+    print(f"reconciled {reconciled}; lineage early/late {lineage_early}/{lineage_late} of "
+          f"{overlap}; forecast boundary-sensitive {sensitive}/{forecast}", file=sys.stderr)
 
 
 if __name__ == "__main__":

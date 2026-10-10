@@ -18,17 +18,20 @@ from qimen_engine.data_tables import (
     S_TERM_INFO,
     ZHI,
 )
-from qimen_engine.jieqi_ext import FINEDATE_EXT
+from qimen_engine.jieqi_computed import FINEDATE_COMPUTED, FINEDATE_COMPUTED_FIRST_YEAR
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _LUNAR_BASE = datetime(1900, 1, 31)
 # iqm.js sTerm 回退公式基点: Date.UTC(1900,0,6,2,5)
 _TERM_BASE_UTC = datetime(1900, 1, 6, 2, 5, tzinfo=UTC)
 _TROPICAL_YEAR_MS = 31556925974.7
-# 节气分钟精度表 = 师门原表(iqm.js finedate,1930-2030)+ 天文计算扩展段
-# (jieqi_ext,2031-2050;同编码同截断口径)。原表一字不动,扩展段只接在其后。
+# 节气分钟精度表 = 师门原表(iqm.js finedate)的 1930-2009 段 + 天文计算段
+# (jieqi_computed,2010-2050;同编码同截断口径)。原表 2011 起逐年偏早、2031 起
+# 无表,故 2010 起改用计算段;data_tables.FINEDATE 本身仍是 iqm.js 原样。
 _FINE_FIRST_YEAR = 1930
-_FINE_TABLE = FINEDATE + FINEDATE_EXT
+_FINE_TABLE = (
+    FINEDATE[: (FINEDATE_COMPUTED_FIRST_YEAR - _FINE_FIRST_YEAR) * 24] + FINEDATE_COMPUTED
+)
 _FINE_LAST_YEAR = _FINE_FIRST_YEAR + len(_FINE_TABLE) // 24 - 1
 
 
@@ -74,8 +77,8 @@ def cyclical(num: int) -> str:
 def s_term(y: int, n: int) -> datetime:
     """某年第 n 个节气的交气时刻(从 0=小寒起算),naive 中国民用时。
 
-    (iqm.js sTerm)1930-2050 用分钟精度表:1930-2030 为 iqm.js 原表 finedate,
-    2031-2050 为天文计算扩展段(原引擎此段回退近似公式,本移植不复刻);
+    (iqm.js sTerm)1930-2050 用分钟精度表:1930-2009 为 iqm.js 原表 finedate,
+    2010-2050 为天文计算段(原表该段偏早或缺失,本移植在此有意偏离原引擎);
     范围外仍回退近似公式(仅日粒度,时分归零)。
     """
     v3_ms = (
