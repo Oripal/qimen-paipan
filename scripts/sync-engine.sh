@@ -21,8 +21,14 @@ fi
 
 git -C "$PLATFORM_REPO" fetch origin main --quiet
 upstream_rev="$(git -C "$PLATFORM_REPO" rev-parse --short origin/main)"
-# 把上游的引擎目录切成一段独立历史(确定性:同样的上游提交总得到同样的结果)
-git -C "$PLATFORM_REPO" subtree split --prefix="$PREFIX_UPSTREAM" -b "$EXPORT_BRANCH" origin/main >/dev/null
+
+# 把上游的引擎目录切成一段独立历史(确定性:同样的上游提交总得到同样的结果)。
+# git subtree split 要求该目录存在于工作区,而平台仓库的主工作区可能落后或有
+# 未提交改动——所以在一个临时的 origin/main 工作区里切,切完即删,不碰主工作区。
+tmp_tree="$(mktemp -d)/platform-main"
+trap 'git -C "$PLATFORM_REPO" worktree remove --force "$tmp_tree" 2>/dev/null || true' EXIT
+git -C "$PLATFORM_REPO" worktree add --quiet --detach "$tmp_tree" origin/main
+git -C "$tmp_tree" subtree split --prefix="$PREFIX_UPSTREAM" -b "$EXPORT_BRANCH" HEAD >/dev/null
 
 git subtree pull --prefix=engine "$PLATFORM_REPO" "$EXPORT_BRANCH" \
   -m "sync(engine): 同步排盘引擎,上游 VoborSpark@${upstream_rev}"
