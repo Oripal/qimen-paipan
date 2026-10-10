@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+
+# Node
+node_modules/
+
+# 师门原版引擎(iqm.js)不入库;重新生成 golden/常量表时临时放在 engine/tests/fixtures/vendor/
+vendor/
+
+# 本地环境
+.env
+.env.*
+!.env.example
