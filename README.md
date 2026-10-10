@@ -36,8 +36,4 @@
 cd engine && uv run pytest -q     # 引擎自测,不依赖本仓库其它部分
 ```
 
-## 师门原版引擎
 
-`engine/` 逐函数移植自师门 Android 应用的 `iqm.js`(已获授权)。原件不入库;
-重新生成 golden 基准或常量表时,临时放到 `engine/tests/fixtures/vendor/iqm.js`
-(该路径被 git 忽略)。
