@@ -1,0 +1,40 @@
+[project]
+name = "qimen-engine"
+version = "0.1.0"
+description = "阴盘奇门排盘引擎 — 时家转盘,移植自师门 iqm.js(可执行 SoT);纯确定性,时间 → Chart JSON"
+requires-python = ">=3.14"
+dependencies = [
+    # 引擎本体只用标准库。zoneinfo 需要 IANA 时区库(日柱序按 Asia/Shanghai 历史
+    # 偏移算:1900 基点 LMT、1986-1991 夏令时)——系统自带时优先用系统的,
+    # 精简容器/Windows 无系统时区库时由本包兜底。
+    "tzdata>=2025.1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["qimen_engine"]
+exclude = [
+    "**/__pycache__",
+    "**/*.pyc",
+    "tests/",
+    ".pytest_cache",
+    ".mypy_cache",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    # 节气计算段的独立源对账(6tail lunar_python,寿星天文历算法)——仅测试用,
+    # 运行时不依赖。直接依赖 PyPI 包而非工作区的 chinese-calendrics:本包目录须能
+    # 原样搬出仓库独立运行。
+    "lunar_python>=1.4.8,<2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
