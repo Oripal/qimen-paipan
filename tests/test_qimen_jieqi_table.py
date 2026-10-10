@@ -3,7 +3,7 @@
 s_term 对 1930-2009 用师门原表(iqm.js finedate),2010-2050 用计算段
 jieqi_computed.py(tests/fixtures/gen_jieqi_computed.py 以 JPL DE440s 星历生成;
 生成器自带对账闸:与原表 1972-2009 段逐项对账)。本套件再用**另一套独立算法**
-(chinese_calendrics 的寿星算法后端)和官方年历锚点各对一遍,并锁定接缝、范围
+(lunar_python 的寿星天文历算法)和官方年历锚点各对一遍,并锁定接缝、范围
 边界、与原表的差异清单,以及「交气那一分钟」的排盘行为。
 """
 
@@ -12,9 +12,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from chinese_calendrics.core import SOLAR_TERM_NAMES, solar_terms
+from lunar_python import Solar
 from qimen_engine import build_chart, cast, cyclical, s_term
-from qimen_engine.data_tables import FINEDATE
+from qimen_engine.data_tables import FINEDATE, SOLAR_TERM
 from qimen_engine.jieqi_computed import FINEDATE_COMPUTED, FINEDATE_COMPUTED_FIRST_YEAR
 
 COMPUTED_YEARS = range(2010, 2051)
@@ -29,6 +29,24 @@ OFFICIAL_ROUNDED = {
     (2025, "冬至"): datetime(2025, 12, 21, 23, 3),
     (2026, "立春"): datetime(2026, 2, 4, 4, 2),
 }
+
+
+def _shouxing_terms(year: int) -> list[datetime]:
+    """寿星算法的某年 24 节气(北京时间,秒级),按 0=小寒 … 23=冬至。
+
+    lunar_python 键约定:中文键「冬至」是上一年 12 月的那个;本公历年年末的
+    冬至在大写拼音键 DONG_ZHI 下。
+    """
+    table = Solar.fromYmd(year, 7, 1).getLunar().getJieQiTable()
+    moments = []
+    for name in SOLAR_TERM:
+        s = table["DONG_ZHI" if name == "冬至" else name]
+        moment = datetime(
+            s.getYear(), s.getMonth(), s.getDay(), s.getHour(), s.getMinute(), s.getSecond(),
+        )
+        assert moment.year == year, (year, name, moment)
+        moments.append(moment)
+    return moments
 
 
 def _lineage(year: int, n: int) -> datetime:
@@ -87,7 +105,7 @@ class TestAgainstOfficialAlmanac:
     ) -> None:
         """本表截断到分,官方四舍五入:本表必须等于官方值或恰早 1 分钟。"""
         year, name = key
-        ours = s_term(year, SOLAR_TERM_NAMES.index(name))
+        ours = s_term(year, SOLAR_TERM.index(name))
         assert timedelta(0) <= official - ours <= timedelta(minutes=1)
 
     def test_entries_the_lineage_table_had_early(self) -> None:
@@ -107,9 +125,9 @@ class TestIndependentSource:
         """
         exact = total = 0
         for y in COMPUTED_YEARS:
-            for n, term in enumerate(solar_terms(y)):
-                diff = abs(s_term(y, n) - term.moment.replace(second=0))
-                assert diff <= timedelta(minutes=1), (y, term.name, s_term(y, n), term.moment)
+            for n, moment in enumerate(_shouxing_terms(y)):
+                diff = abs(s_term(y, n) - moment.replace(second=0))
+                assert diff <= timedelta(minutes=1), (y, SOLAR_TERM[n], s_term(y, n), moment)
                 exact += diff == timedelta(0)
                 total += 1
         assert total == len(COMPUTED_YEARS) * 24

@@ -68,7 +68,7 @@ cd shared/python/qimen_engine && ../../../.venv/bin/pytest tests/ -q
 
 - **golden**:`tests/fixtures/golden_charts.json` 由 node 执行原版 iqm.js 生成(46 例),
   Python 逐宫逐层对比。比对时节气表换回原表——这套测的是移植保真度。
-- **节气计算段**:与寿星算法(`chinese_calendrics`)逐项对账,并对官方年历锚点。
+- **节气计算段**:与寿星算法(`lunar_python`)逐项对账,并对官方年历锚点。
 
 重新生成。前两条需要原版 `iqm.js`:它不入库,用前放到 `tests/fixtures/vendor/iqm.js`
 (该路径被 git 忽略):

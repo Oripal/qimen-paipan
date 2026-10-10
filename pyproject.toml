@@ -27,12 +27,11 @@ exclude = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    # 节气扩展段的独立源对账(寿星算法)——仅测试用,运行时不依赖
-    "chinese-calendrics",
+    # 节气计算段的独立源对账(6tail lunar_python,寿星天文历算法)——仅测试用,
+    # 运行时不依赖。直接依赖 PyPI 包而非工作区的 chinese-calendrics:本包目录须能
+    # 原样搬出仓库独立运行。
+    "lunar_python>=1.4.8,<2",
 ]
-
-[tool.uv.sources]
-chinese-calendrics = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
